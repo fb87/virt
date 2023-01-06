@@ -14,7 +14,7 @@ file(WRITE ${OUTPUT_DIR}/_install/etc/init.d/rcS
 
     "mkdir -p /proc /sys /dev\n\n"
 
-    "mount -t proc none /proc\n"
+    "mount -t proc none  /proc\n"
     "mount -t sysfs none /sys\n"
 
     "/sbin/mdev -s"
@@ -53,64 +53,57 @@ ExternalProject_Add(u-boot
     CONFIGURE_COMMAND       CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} qemu_arm64_defconfig
     BUILD_COMMAND           CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} 
     INSTALL_COMMAND         install -m644 u-boot.bin ${OUTPUT_DIR}
-            COMMAND         install tools/mkimage ${OUTPUT_DIR}
+            COMMAND         install tools/mkimage    ${OUTPUT_DIR}
+            COMMAND         echo "U-Boot built"
 )
 
 # xen hypervisor - QEMU aarch64
 ExternalProject_Add(xen
-    URL                     https://github.com/xen-project/xen/archive/refs/tags/RELEASE-4.17.0.tar.gz
+    URL                     https://downloads.xenproject.org/release/xen/4.14.0/xen-4.14.0.tar.gz
     BUILD_IN_SOURCE         true
-    CONFIGURE_COMMAND       XEN_TARGET_ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ./configure --disable-tools
+    CONFIGURE_COMMAND       XEN_TARGET_ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CONFIG_DEBUG=y ./configure --disable-tools
     BUILD_COMMAND           XEN_TARGET_ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} dist-xen
-    INSTALL_COMMAND         install -m644 dist/install/boot/xen ${OUTPUT_DIR}
+    INSTALL_COMMAND         install -m644 dist/install/boot/xen-4.14.0 ${OUTPUT_DIR}
 )
 
 # busybox - QEMU aarch64
 ExternalProject_Add(busybox
-    URL                     https://github.com/mirror/busybox/archive/refs/tags/1_35_0.tar.gz
+    URL                     https://busybox.net/downloads/busybox-1.32.0.tar.bz2
     BUILD_IN_SOURCE         true
     CONFIGURE_COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} defconfig
-              COMMAND       echo "CONFIG_STATIC=y" >> .config
+              COMMAND       sed -i.orig "s/^#.*CONFIG_STATIC.*/CONFIG_STATIC=y/" .config
     BUILD_COMMAND           ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} install
     INSTALL_COMMAND         cp -Rf _install busybox ${OUTPUT_DIR} && mkdir -p ${OUTPUT_DIR}/_install/etc/init.d
             COMMAND         cd ${OUTPUT_DIR}/_install && find . | cpio -o --format=newc > ${OUTPUT_DIR}/initrd.img
             COMMAND         chmod +x ${OUTPUT_DIR}/_install/etc/init.d/rcS
-            COMMAND         true
 )
 
 # kernel - QEMU aarch64
 ExternalProject_Add(kernel
-    URL                     https://github.com/torvalds/linux/archive/refs/tags/v5.18.tar.gz
+    URL                     https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.9.15.tar.xz
     BUILD_IN_SOURCE         true
     CONFIGURE_COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} allnoconfig xen.config
-    COMMAND                 ./scripts/config
-                                --set-str DEFAULT_HOSTNAME "dom0"
-                                --set-val NET n                  # we don't want network stack for now
-                                --set-val PRINTK y               # we do want some log from kernel
-                                --set-val PROC_FS y              # and procfs
-                                --set-val SERIAL_AMBA_PL011 y    # and serial console
-                                --set-val SERIAL_AMBA_PL011_CONSOLE y   # yes serial console again
-                                --set-val EXT2_FS y              # wanna have EXT2 support
+              COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ./scripts/config
+                                --set-val VIRTUALIZATION y
                                 --set-val BINFMT_SCRIPT y
+                                --set-val NET n
+                                --set-val PROC_FS y
                                 --set-val BLK_DEV_INITRD y
-                                --set-val INITRAMFS_ROOT_UID 0
-                                --set-val INITRAMFS_ROOT_GID 0
-                                --set-val RD_GZIP n
-                                --set-val RD_BZIP2 n
-                                --set-val RD_LZMA n
-                                --set-val RD_XZ n
-                                --set-val RD_LZO n
-                                --set-val RD_LZ4 n
-                                --set-val RD_ZSTD n
-                                --set-val EXT2_FS_XATTR n
-                                --set-val VLK_DEV_INITRD y
+                                --set-val SERIAL_AMBA_PL011 y
+                                --set-val SERIAL_AMBA_PL011_CONSOLE y
+                                --set-val FRAMEBUFFER_CONSOLE y
+                                --set-val EXT2_FS y
+                                --set-val EXT4_FS y
+                                --set-val PRINTK y
+                                --set-val TTY_PRINTK y
                                 --set-val VIRTIO y
                                 --set-val VIRTIO_FS y
                                 --set-val VIRTIO_BLK y
                                 --set-val VIRTIO_CONSOLE y
                                 --set-val SCSI_VIRTIO y
                                 --set-val CRYPTO_DEV_VIRTIO y
-    COMMAND                 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} oldconfig
+                                --set-val STACKTRACE y
+              COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} oldconfig
     BUILD_COMMAND           ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS}
     INSTALL_COMMAND         install -m644 arch/arm64/boot/Image ${OUTPUT_DIR}
 )
@@ -118,18 +111,10 @@ ExternalProject_Add(kernel
 # an virtual target to pack all output above
 add_custom_target(virt_all ALL)
 
-# add the convinience script to start qemu, this makes life easier
-# we can do overlaying but i'm kinda lazy
-file(WRITE ${OUTPUT_DIR}/start-qemu.sh
-    "#!/usr/bin/env bash\n\n"
-    "qemu-system-aarch64 -nographic -M virt -smp 4 -cpu cortex-a53 -m 256 -bios ${OUTPUT_DIR}/u-boot.bin -drive format=raw,file=${OUTPUT_DIR}/disk.img"
-)
-
 # make sure the script is executable to avoid complaining from noobs
 add_custom_command(TARGET virt_all POST_BUILD
     COMMAND                 ${CMAKE_CURRENT_SOURCE_DIR}/src/pack-rootfs.sh ${OUTPUT_DIR}
     COMMAND                 chmod +x ${OUTPUT_DIR}/start-qemu.sh
-    COMMAND                 true
 )
 
 # to make sure all others got built before we pack them
