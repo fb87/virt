@@ -102,8 +102,10 @@ ExternalProject_Add(kernel
                                 --set-val VIRTIO_CONSOLE y
                                 --set-val SCSI_VIRTIO y
                                 --set-val CRYPTO_DEV_VIRTIO y
-                                --set-val STACKTRACE y
-              COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} oldconfig
+                                --set-val HVC_CONSOLE y
+                                --set-val INITRAMFS_ROOT_UID 0
+                                --set-val INITRAMFS_ROOT_GID 0
+              COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} olddefconfig
     BUILD_COMMAND           ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS}
     INSTALL_COMMAND         install -m644 arch/arm64/boot/Image ${OUTPUT_DIR}
 )

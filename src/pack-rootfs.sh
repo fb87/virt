@@ -12,7 +12,7 @@ qemu-system-aarch64 -machine virt,gic_version=3 -machine virtualization=true -cp
 cat > ${OUTPUT_DIR}/start-qemu.sh <<-EOF
     #!/usr/bin/env bash
 
-    qemu-system-aarch64 -nographic -machine virt,gic_version=3 \
+    qemu-system-aarch64 -nographic -machine virt,gic_version=3 -no-reboot -no-shutdown \
         -machine virtualization=true -cpu cortex-a57 -machine type=virt \
         -m 2G -bios ${OUTPUT_DIR}/u-boot.bin -drive format=raw,file=${OUTPUT_DIR}/disk.img
 EOF
@@ -29,17 +29,24 @@ dtb_size=$(printf "%x\n" `stat -c "%s" ${OUTPUT_DIR}/virt-gicv3.dtb`)
 # 16 MiB = H'  10_0000
 # Note: 0x040200000 - address of boot.scr
 cat > boot.cmd <<-EOF
-    setenv dtb_addr 0x048000000
-    setenv xen_addr 0x048800000
-    setenv ker_addr 0x049000000
-    setenv ird_addr 0x058000000
+    setenv dtb_addr 0x40000000
+    setenv xen_addr 0x42000000
+    setenv ker_addr 0x46000000
+    setenv ird_addr 0x48000000
+
+    setenv du1_ker_addr 0x50000000
+    setenv du1_ird_addr 0x52000000
 
     setenv xen_bootargs "dom0_mem=512M log_lvl=all guest_loglvl=all"
 
+
+    # fatload virtio 0:1 \${dtb_addr} /virt-gicv3.dtb
     fatload virtio 0:1 \${xen_addr} /xen-4.14.0
     fatload virtio 0:1 \${ker_addr} /Image
-    fatload virtio 0:1 \${dtb_addr} /virt-gicv3.dtb
     fatload virtio 0:1 \${ird_addr} /initrd.img
+
+    fatload virtio 0:1 \${du1_ker_addr} /Image
+    fatload virtio 0:1 \${du1_ird_addr} /initrd.img
 
     fdt addr \${dtb_addr}
 
@@ -49,11 +56,26 @@ cat > boot.cmd <<-EOF
     fdt mknod /chosen module@0
     fdt set /chosen/module@0 compatible "xen,linux-zimage" "xen,multiboot-module"
     fdt set /chosen/module@0 reg <\${ker_addr} 0x${kernel_size}>
-    fdt set /chosen/module@0 bootargs "console=hvc0 root=/dev/ram0 rdinit=/init console=ttyAMA0,115200"
+    fdt set /chosen/module@0 bootargs "rw root=/dev/ram rdinit=/sbin/init   earlyprintk=serial,ttyAMA0 console=hvc0 earlycon=xenboot"
     fdt mknod /chosen module@1
     fdt set /chosen/module@1 compatible "xen,linux-initrd" "xen,multiboot-module"
     fdt set /chosen/module@1 reg <\${ird_addr} 0x${initrd_size}>
     
+    fdt mknod /chosen domU1
+    fdt set /chosen/domU1 compatible "xen,domain"
+    fdt set /chosen/domU1 \#address-cells <1>
+    fdt set /chosen/domU1 \#size-cells <1>
+    fdt set /chosen/domU1 \cpus <1>
+    fdt set /chosen/domU1 \memory <0 548576>
+    fdt set /chosen/domU1 vpl011
+    fdt mknod /chosen/domU1 module@0
+    fdt set /chosen/domU1/module@0 compatible "multiboot,kernel" "multiboot,module"
+    fdt set /chosen/domU1/module@0 reg <\${du1_ker_addr} 0x${kernel_size}>
+    fdt set /chosen/domU1/module@0 bootargs "rw root=/dev/ram rdinit=/sbin/init console=ttyAMA0"
+    fdt mknod /chosen/domU1 module@1
+    fdt set /chosen/domU1/module@1 compatible "multiboot,ramdisk" "multiboot,module"
+    fdt set /chosen/domU1/module@1 reg <\${du1_ird_addr} 0x${initrd_size}>
+
     setenv bootargs
 
     printenv
