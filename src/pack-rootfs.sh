@@ -3,6 +3,11 @@
 ARTIFACT_DIR=${1:-$PWD}
 OUTPUT_DIR=${2:-${ARTIFACT_DIR}}
 
+function die {
+    echo $"Error! $@"
+    exit -1
+}
+
 # generate dtb
 qemu-system-aarch64 -machine virt,gic_version=3 -machine virtualization=true -cpu cortex-a57 \
     -machine type=virt -m 2G -display none -machine dumpdtb=${ARTIFACT_DIR}/virt-gicv3.dtb
@@ -14,8 +19,22 @@ cat > ${OUTPUT_DIR}/start-qemu.sh <<-EOF
 
     qemu-system-aarch64 -nographic -machine virt,gic_version=3 -no-reboot -no-shutdown \
         -machine virtualization=true -cpu cortex-a57 -machine type=virt \
-        -m 2G -bios ${OUTPUT_DIR}/u-boot.bin -drive format=raw,file=${OUTPUT_DIR}/disk.img
+        -m 2G -bios ${OUTPUT_DIR}/u-boot.bin -drive format=raw,file=${OUTPUT_DIR}/disk.img -drive format=raw,file=${OUTPUT_DIR}/../system.img
 EOF
+
+# fetch Android system image/ramdisk
+BUILD_ID="9440689"
+
+if [ ! -f ./system.img ];
+then
+    if [ ! -f ./fetch_artifact ]; then
+        wget https://android.googlesource.com/tools/fetch_artifact/+archive/refs/heads/master.tar.gz -O - | tar zxf -
+        go build fetch_artifact.go || die "unable to build fetch_artifact"
+    fi
+
+    ./fetch_artifact -target=gsi_car_arm64-userdebug -build_id=${BUILD_ID} -artifact=gsi_car_arm64-img-${BUILD_ID}.zip | unzip || die "unable to fetch system image"
+    unzip gsi_car_arm64-img-${BUILD_ID}.zip
+fi
 
 kernel_size=$(printf "%x\n" `stat -c "%s" ${OUTPUT_DIR}/Image`)
 initrd_size=$(printf "%x\n" `stat -c "%s" ${OUTPUT_DIR}/initrd.img`)
@@ -39,7 +58,6 @@ cat > boot.cmd <<-EOF
 
     setenv xen_bootargs "dom0_mem=512M log_lvl=all guest_loglvl=all"
 
-
     # fatload virtio 0:1 \${dtb_addr} /virt-gicv3.dtb
     fatload virtio 0:1 \${xen_addr} /xen-4.14.0
     fatload virtio 0:1 \${ker_addr} /Image
@@ -53,10 +71,12 @@ cat > boot.cmd <<-EOF
     fdt set /chosen \#address-cells <1>
     fdt set /chosen \#size-cells <1>
     fdt set /chosen xen,xen-bootargs "\${xen_bootargs}"
+
     fdt mknod /chosen module@0
     fdt set /chosen/module@0 compatible "xen,linux-zimage" "xen,multiboot-module"
     fdt set /chosen/module@0 reg <\${ker_addr} 0x${kernel_size}>
     fdt set /chosen/module@0 bootargs "rw root=/dev/ram rdinit=/sbin/init   earlyprintk=serial,ttyAMA0 console=hvc0 earlycon=xenboot"
+
     fdt mknod /chosen module@1
     fdt set /chosen/module@1 compatible "xen,linux-initrd" "xen,multiboot-module"
     fdt set /chosen/module@1 reg <\${ird_addr} 0x${initrd_size}>
@@ -68,17 +88,18 @@ cat > boot.cmd <<-EOF
     fdt set /chosen/domU1 \cpus <1>
     fdt set /chosen/domU1 \memory <0 548576>
     fdt set /chosen/domU1 vpl011
+
     fdt mknod /chosen/domU1 module@0
     fdt set /chosen/domU1/module@0 compatible "multiboot,kernel" "multiboot,module"
     fdt set /chosen/domU1/module@0 reg <\${du1_ker_addr} 0x${kernel_size}>
     fdt set /chosen/domU1/module@0 bootargs "rw root=/dev/ram rdinit=/sbin/init console=ttyAMA0"
+
     fdt mknod /chosen/domU1 module@1
     fdt set /chosen/domU1/module@1 compatible "multiboot,ramdisk" "multiboot,module"
     fdt set /chosen/domU1/module@1 reg <\${du1_ird_addr} 0x${initrd_size}>
 
     setenv bootargs
-
-    printenv
+    
     booti \${xen_addr} - \${dtb_addr}
 EOF
 
@@ -124,6 +145,11 @@ cat > genimage.cfg <<- EOF
         partition root {
             partition-type = 0x83
             image = "root.ext2"
+        }
+
+        partition system {
+            partition-type = 0x83
+            image = "$PWD/system.img"
         }
     }
 EOF

@@ -82,30 +82,31 @@ ExternalProject_Add(busybox
 ExternalProject_Add(kernel
     URL                     https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-5.9.15.tar.xz
     BUILD_IN_SOURCE         true
-    CONFIGURE_COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} allnoconfig xen.config
-              COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ./scripts/config
-                                --set-val VIRTUALIZATION y
-                                --set-val BINFMT_SCRIPT y
-                                --set-val NET n
-                                --set-val PROC_FS y
-                                --set-val BLK_DEV_INITRD y
-                                --set-val SERIAL_AMBA_PL011 y
-                                --set-val SERIAL_AMBA_PL011_CONSOLE y
-                                --set-val FRAMEBUFFER_CONSOLE y
-                                --set-val EXT2_FS y
-                                --set-val EXT4_FS y
-                                --set-val PRINTK y
-                                --set-val TTY_PRINTK y
-                                --set-val VIRTIO y
-                                --set-val VIRTIO_FS y
-                                --set-val VIRTIO_BLK y
-                                --set-val VIRTIO_CONSOLE y
-                                --set-val SCSI_VIRTIO y
-                                --set-val CRYPTO_DEV_VIRTIO y
-                                --set-val HVC_CONSOLE y
-                                --set-val INITRAMFS_ROOT_UID 0
-                                --set-val INITRAMFS_ROOT_GID 0
-              COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} olddefconfig
+    CONFIGURE_COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} defconfig xen.config
+              #COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- ./scripts/config
+              #                  --set-val VIRTUALIZATION y
+              #                  --set-val BINFMT_SCRIPT y
+              #                  --set-val NET n
+              #                  --set-val PROC_FS y
+              #                  --set-val BLK_DEV_INITRD y
+              #                  --set-val SERIAL_AMBA_PL011 y         # to see domU log
+              #                  --set-val SERIAL_AMBA_PL011_CONSOLE y # ditto
+              #                  --set-val HVC_CONSOLE y               # ditto
+              #                  --set-val FRAMEBUFFER_CONSOLE y
+              #                  --set-val EXT2_FS y
+              #                  --set-val EXT4_FS y
+              #                  --set-val PRINTK y
+              #                  --set-val TTY_PRINTK y
+              #                  --set-val FUSE_FS y                   # must enable in order to enable VIRTIO
+              #                  --set-val VIRTIO y
+              #                  --set-val VIRTIO_FS y
+              #                  --set-val VIRTIO_BLK y
+              #                  --set-val VIRTIO_CONSOLE y
+              #                  --set-val SCSI_VIRTIO y
+              #                  --set-val CRYPTO_DEV_VIRTIO y
+              #                  --set-val INITRAMFS_ROOT_UID 0
+              #                  --set-val INITRAMFS_ROOT_GID 0
+              #COMMAND       ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS} olddefconfig
     BUILD_COMMAND           ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- make ${BUILD_JOBS}
     INSTALL_COMMAND         install -m644 arch/arm64/boot/Image ${OUTPUT_DIR}
 )
