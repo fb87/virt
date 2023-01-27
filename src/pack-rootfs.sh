@@ -24,16 +24,20 @@ EOF
 
 # fetch Android system image/ramdisk
 BUILD_ID="9440689"
+BUILD_MODE="userdebug"
+BUILD_TARGET="gsi_car_arm64"
 
-if [ ! -f ./system.img ];
+if [ ! -f ./${BUILD_TARGET}-img-${BUILD_ID}.zip ];
 then
-    if [ ! -f ./fetch_artifact ]; then
-        wget https://android.googlesource.com/tools/fetch_artifact/+archive/refs/heads/master.tar.gz -O - | tar zxf -
-        go build fetch_artifact.go || die "unable to build fetch_artifact"
-    fi
+set -x
+    android_build_server="https://androidbuildinternal.googleapis.com/android/internal/build/v3/builds"
+    android_build_uri="${BUILD_ID}/${BUILD_TARGET}-${BUILD_MODE}/attempts/latest/artifacts/${BUILD_TARGET}-img-${BUILD_ID}.zip/url"
+    wget --no-check-certificate "${android_build_server}/${android_build_uri}" -O ${BUILD_TARGET}-img-${BUILD_ID}.zip
+fi
 
-    ./fetch_artifact -target=gsi_car_arm64-userdebug -build_id=${BUILD_ID} -artifact=gsi_car_arm64-img-${BUILD_ID}.zip | unzip || die "unable to fetch system image"
-    unzip gsi_car_arm64-img-${BUILD_ID}.zip
+if [ ! -f ./system.img ]
+then
+    unzip -o ${BUILD_TARGET}-img-${BUILD_ID}.zip
 fi
 
 kernel_size=$(printf "%x\n" `stat -c "%s" ${OUTPUT_DIR}/Image`)
